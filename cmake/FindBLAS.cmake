@@ -1,0 +1,27 @@
+# - Try to find CBLAS
+# Once done, this will define
+#
+# BLAS_FOUND - system has BLAS
+# BLAS_LIBRARIES - link these to use BLAS
+
+FIND_LIBRARY( BLAS_LIBRARY blas
+	/usr/lib64
+	/usr/lib
+	/usr/local/lib
+	/opt/local/lib
+    "${CMAKE_SOURCE_DIR}/lib"
+    "${CMAKE_SOURCE_DIR}/thirdparty/lib"
+)
+IF(BLAS_LIBRARY)
+	SET( BLAS_FOUND TRUE )
+	SET( BLAS_LIBRARIES ${BLAS_LIBRARY} )
+ENDIF(BLAS_LIBRARY)
+IF(BLAS_FOUND)
+	IF(NOT BLAS_FIND_QUIETLY)
+	MESSAGE(STATUS "Found BLAS: ${BLAS_LIBRARY}")
+	ENDIF(NOT BLAS_FIND_QUIETLY)
+ELSE(BLAS_FOUND)
+	IF(BLAS_FIND_REQUIRED)
+	MESSAGE(FATAL_ERROR "Could not find libblas")
+	ENDIF(BLAS_FIND_REQUIRED)
+ENDIF(BLAS_FOUND)
