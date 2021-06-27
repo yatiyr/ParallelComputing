@@ -1,11 +1,15 @@
 #include <iostream>
 #include <cblas.h>
-#include <utils.h>
+#include <Utils.h>
 #include <mpi.h>
 #include <RootDir.h>
 #include <string>
-
-
+#include <ParallelFunctions.h>
+#include <SequentialFunctions.h>
+#include <fstream>
+#include <sstream>
+#include <MatfileReader.h>
+#include <Timer.h>
 #include <matio.h>
 
 
@@ -91,16 +95,89 @@ int main(int argc, char** argv)
 
 int main(int argc, char **argv) {
 
+
+    // Read config file
+    std::string configPath = std::string(ROOT_DIR) + "config/config.conf";
+    std::ifstream file(configPath);
+    std::string line = "";
+
+
+    std::string matrixName;
+    std::string rightHandName;
+    std::string methodName;
+
+    while(std::getline(file,line))
+    {
+        std::stringstream ss(line);
+        std::string word = "";
+        ss >> word;
+        
+        if(word == "matrix")
+        {
+            ss >> word;
+            matrixName = word;
+        }
+        else if(word == "rightHand")
+        {
+            ss >> word;
+            rightHandName = word;
+        }
+        else if(word == "it_method")
+        {
+            ss >> word;
+            methodName = word;
+        }
+    }
+
+    std::string matrixPath = std::string(ROOT_DIR) + "matfiles/" + matrixName;
+    std::string rightHandPath = std::string(ROOT_DIR) + "matfiles/" + rightHandName;
+
     
+    Mat matrix = MatfileReader::ReadMat(matrixName);
 
-    std::string filename = ROOT_DIR + std::string("matrices/3x3IdentityMatrix.mat");
+    double* x0 = (double*) calloc(matrix.columnSize, sizeof(double));
+    double* b  = ones(matrix.columnSize);
+    int iterations = 0;
 
-    mat_t *mat = Mat_Open(filename.c_str(), MAT_ACC_RDONLY);
+    {
+        Timer t;
+        iterations = gauss_seidel_seq(matrix.data, b, x0, matrix.rowSize, 100, 1.5e-10);
+    }
 
-    matvar_t *matVar = Mat_VarRead(mat, (char*)"A");
 
-            unsigned xSize = matVar->nbytes/matVar->data_size ;
-            const double *xData = static_cast<const double*>(matVar->data) ;
+    free(x0);
+    free(b);
+
+
+    /*
+
+    MPI_Init(nullptr, nullptr);
+
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    int name_len;
+    MPI_Get_processor_name(processor_name, &name_len);
+
+    printf("Hello world from processor %s, rank %d out of %d processors \n", processor_name, world_rank, world_size);
+
+    MPI_Finalize(); */
+
+
+    // std::string filename = ROOT_DIR + std::string("matrices/1138_bus.mat");
+
+    // mat_t *mat = Mat_Open(filename.c_str(), MAT_ACC_RDWR);
+
+    // matvar_t *matVar = Mat_VarRead(mat, (char*)"Problem");
+
+    //         unsigned xSize = matVar->nbytes/matVar->data_size ;
+    //         matvar_t *xData = matVar->data;
+
+            /*
             for(int i=0; i<xSize; ++i)
             {
                 std::cout<<"\tx["<<i<<"] = "<<xData[i]<<"\n" ;
@@ -109,7 +186,7 @@ int main(int argc, char **argv) {
             for(int i=0; i<matVar->rank; ++i)
             {
                 std::cout<<"\tdim["<<i<<"] == "<<matVar->dims[i]<<"\n" ;
-            }
+            } */
     
 
     // MPI_Init(&argc, &argv);
