@@ -105,6 +105,7 @@ int main(int argc, char **argv) {
     std::string matrixName;
     std::string rightHandName;
     std::string methodName;
+    double lMax, lMin;
 
     while(std::getline(file,line))
     {
@@ -116,6 +117,7 @@ int main(int argc, char **argv) {
         {
             ss >> word;
             matrixName = word;
+            ss >> lMax >> lMin;
         }
         else if(word == "rightHand")
         {
@@ -137,12 +139,27 @@ int main(int argc, char **argv) {
 
     double* x0 = (double*) calloc(matrix.columnSize, sizeof(double));
     double* b  = ones(matrix.columnSize);
+
     int iterations = 0;
 
     {
         Timer t;
-        iterations = gauss_seidel_seq(matrix.data, b, x0, matrix.rowSize, 100, 1.5e-10);
+        if(methodName == "gauss-seidel")
+        {
+            iterations = gauss_seidel_seq(matrix.data, b, x0, matrix.rowSize, 100, 1.5e-10);
+        }
+        else if(methodName == "jacobi")
+        {
+            iterations = jacobi_seq(matrix.data, b, x0, matrix.rowSize, 100, 1.5e-10);
+        }
+        else if(methodName == "chebyshev")
+        {
+            iterations = chebyshev_seq(matrix.data, b, x0, matrix.rowSize, 100, 1.5e-10, lMax, lMin);
+        }
+
     }
+
+    std::cout << iterations << " iterations have passed." << '\n';
 
 
     free(x0);
