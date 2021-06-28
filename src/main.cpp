@@ -165,7 +165,6 @@ int main(int argc, char **argv) {
     int iterations = 0;
 
     {
-        Timer t;
         if(std::strcmp(MethodName, "gauss-seidel") == 0)
         {
             iterations = gauss_seidel_parallel(Matrix, b, x0, MatrixDim, 100, 1.5e-10, offset, chunkSize);
