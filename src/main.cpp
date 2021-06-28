@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cblas.h>
 #include <Utils.h>
-#include <mpi.h>
 #include <RootDir.h>
 #include <string>
 #include <ParallelFunctions.h>
@@ -13,132 +12,192 @@
 #include <matio.h>
 
 
-#define tS(x) std::cout<<"\t"<<(#x)<<" == "<<(x)<<"\n"
+#include <mpi.h>
 
-#define COLS  12
-#define ROWS  8
-
-/*
-int main(int argc, char** argv)
-{
-
-   enum CBLAS_ORDER order;
-   enum CBLAS_TRANSPOSE transa;
-
-   double *x, *y;
-
-   double alpha, beta;
-   int m, n, lda, incx, incy, i;
-
-   order = CblasColMajor;
-   transa = CblasNoTrans;
-
-   m = 4; // Size of Column ( the number of rows ) 
-   n = 4; // Size of Row ( the number of columns )
-   lda = 4; // Leading dimension of 5 * 4 matrix is 5 
-   incx = 1;
-   incy = 1;
-   alpha = 1;
-   beta = 0;
-
-   double a[m][n];
-
-   //a = (double *)malloc(sizeof(double)*m*n);
-   x = (double *)malloc(sizeof(double)*n);
-   y = (double *)malloc(sizeof(double)*n);
-   // The elements of the first column 
-   a[0][0] = 1;
-   a[0][1] = 2;
-   a[0][2] = 3;
-   a[0][3] = 4;
-   // The elements of the second column 
-   a[1][0] = 1;
-   a[1][1] = 1;
-   a[1][2] = 1;
-   a[1][3] = 1;
-   // The elements of the third column
-   a[2][0] = 3;
-   a[2][1] = 4;  
-   a[2][2] = 5;
-   a[2][3] = 6;
-   // The elements of the fourth column
-   a[3][0] = 5;
-   a[3][1] = 6;
-   a[3][2] = 7;
-   a[3][3] = 8;
-   // The elemetns of x and y
-   x[0] = 1;
-   x[1] = 2;
-   x[2] = 1;
-   x[3] = 1;
-   y[0] = 0;
-   y[1] = 0;
-   y[2] = 0;
-   y[3] = 0;
-   
-   cblas_dgemv( order, transa, m, n, alpha, *a, lda, x, incx, beta,
-                y, incy );
-   cblas_dscal(n, 2, y, 1);
-   // Print y
-   //for( i = 0; i < n; i++ ) 
-   //   printf(" y%d = %f\n", i, y[i]);
-   //free(a);
-
-   //printMat(*a, m, n, MatOrder::colMajor);
-   printVec(y, n);
-   free(x);
-   free(y);
-   return 1;
-
-}*/
-
+#define NOT_ENOUGH_PROCESSES_NUM_ERROR 1
+#define ROOT_PROCESS 0
 
 int main(int argc, char **argv) {
 
+    // each process will know its
+    // number and process size from
+    // these variables
+    int worldSize;
+    int worldRank;
 
-    // Read config file
-    std::string configPath = std::string(ROOT_DIR) + "config/config.conf";
-    std::ifstream file(configPath);
-    std::string line = "";
+    // we also need an offset value
+    // for partitioning matrices and
+    // vectors
+    int offset;
+
+    // we need to determine size of
+    // data chunks as well
+    int chunkSize;
+
+    // Root process will read matrix and
+    // fill in this pointer
+    // and broadcast it to other processes
+    // with its size of course
+    // we also have method name, method namesize
+    // and max,min eigenvalues of our matrix
+    double* Matrix = nullptr;
+    int MatrixDim;
+    char* MethodName = nullptr;
+    int methodNameSize;
+    double maxEig, minEig;
 
 
-    std::string matrixName;
-    std::string rightHandName;
-    std::string methodName;
-    double lMax, lMin;
+    MPI_Init(&argc, &argv);
 
-    while(std::getline(file,line))
+    // Each process gets how many processors are working
+    // and their number
+    MPI_Comm_size(MPI_COMM_WORLD, &worldSize);
+    MPI_Comm_rank(MPI_COMM_WORLD, &worldRank);
+
+    // we need more than 2 and even number of processes
+    if(worldSize < 2 && worldSize % 2 == 0)
     {
-        std::stringstream ss(line);
-        std::string word = "";
-        ss >> word;
-        
-        if(word == "matrix")
-        {
-            ss >> word;
-            matrixName = word;
-            ss >> lMax >> lMin;
-        }
-        else if(word == "rightHand")
-        {
-            ss >> word;
-            rightHandName = word;
-        }
-        else if(word == "it_method")
-        {
-            ss >> word;
-            methodName = word;
-        }
+        MPI_Abort(MPI_COMM_WORLD, NOT_ENOUGH_PROCESSES_NUM_ERROR);        
     }
 
-    std::string matrixPath = std::string(ROOT_DIR) + "matfiles/" + matrixName;
-    std::string rightHandPath = std::string(ROOT_DIR) + "matfiles/" + rightHandName;
+
+
+    // Root process reads config file and forms the
+    // matrix we are going to work with. 
+    // 
+    // Then, it broadcasts size of the matrix and
+    // the data
+    if(worldRank == ROOT_PROCESS)
+    {
+        // Read config file
+        // TODO: CAN MOVE THIS CODE INTO A CLASS OR MAKE IT A FUNCTION I DON'T KNOW :D
+        std::string configPath = std::string(ROOT_DIR) + "config/config.conf";
+        std::ifstream file(configPath);
+        std::string line = "";
+
+
+        std::string matrixName;
+        std::string rightHandName;
+        std::string methodName;
+        double lMax, lMin;
+
+        while(std::getline(file,line))
+        {
+            std::stringstream ss(line);
+            std::string word = "";
+            ss >> word;
+            
+            if(word == "matrix")
+            {
+                ss >> word;
+                matrixName = word;
+                ss >> lMax >> lMin;
+            }
+            else if(word == "rightHand")
+            {
+                ss >> word;
+                rightHandName = word;
+            }
+            else if(word == "it_method")
+            {
+                ss >> word;
+                methodName = word;
+            }
+        }
+
+        std::string matrixPath = std::string(ROOT_DIR) + "matfiles/" + matrixName;
+        std::string rightHandPath = std::string(ROOT_DIR) + "matfiles/" + rightHandName;
+
+        // Fill in work matrix and its dimension
+        Mat matrix = MatfileReader::ReadMat(matrixName);
+        Matrix      = matrix.data;
+        MatrixDim   = matrix.columnSize;
+
+        MethodName = (char*)malloc(sizeof(char)*(methodName.size() + 1));
+        std::copy(methodName.begin(), methodName.end(), MethodName);
+        MethodName[methodName.size()] = '\0';
+
+        methodNameSize = methodName.size();
+
+        maxEig = lMax;
+        minEig = lMin;
+
+        // Broadcast this data to other processes so they can read and
+        // use it too
+        MPI_Bcast(&MatrixDim, 1, MPI_INT, ROOT_PROCESS, MPI_COMM_WORLD);
+        MPI_Bcast(Matrix, MatrixDim*MatrixDim, MPI_DOUBLE, ROOT_PROCESS, MPI_COMM_WORLD);
+        MPI_Bcast(&methodNameSize, 1, MPI_INT, ROOT_PROCESS, MPI_COMM_WORLD);        
+        MPI_Bcast(MethodName, methodName.size() + 1, MPI_CHAR, ROOT_PROCESS, MPI_COMM_WORLD);
+        MPI_Bcast(&maxEig, 1, MPI_DOUBLE, ROOT_PROCESS, MPI_COMM_WORLD);
+        MPI_Bcast(&minEig, 1, MPI_DOUBLE, ROOT_PROCESS, MPI_COMM_WORLD);
+
+    }
+    else
+    {
+        // We use bcast in other processes as well in order to get the data
+        // we first get the dimensions
+        MPI_Bcast(&MatrixDim, 1, MPI_INT, ROOT_PROCESS, MPI_COMM_WORLD);
+
+        // after we get size of matrix, we allocate space for our Matrix pointer
+        Matrix = (double*)malloc(sizeof(double)*MatrixDim*MatrixDim);
+        MPI_Bcast(Matrix, MatrixDim*MatrixDim, MPI_DOUBLE, ROOT_PROCESS, MPI_COMM_WORLD);
+
+        // Get method name but first allocate
+        MPI_Bcast(&methodNameSize, 1, MPI_INT, ROOT_PROCESS, MPI_COMM_WORLD);        
+        MethodName = (char*)malloc(sizeof(char)*(methodNameSize + 1));
+        MPI_Bcast(MethodName, methodNameSize + 1, MPI_CHAR, ROOT_PROCESS, MPI_COMM_WORLD);
+
+        // Get max min eigenvalues
+        MPI_Bcast(&maxEig, 1, MPI_DOUBLE, ROOT_PROCESS, MPI_COMM_WORLD);
+        MPI_Bcast(&minEig, 1, MPI_DOUBLE, ROOT_PROCESS, MPI_COMM_WORLD);        
+
+    }
 
     
-    Mat matrix = MatfileReader::ReadMat(matrixName);
+    // Allocate initial guess and right hand side vectors
+    double* x0 = (double*) calloc(MatrixDim, sizeof(double));
+    double* b  = ones(MatrixDim);
 
-    double* x0 = (double*) calloc(matrix.columnSize, sizeof(double));
-    double* b  = ones(matrix.columnSize);
+    // calculate chunk size and offset
+    chunkSize = MatrixDim / worldSize;
+    offset = worldRank * chunkSize;
+
+    int iterations = 0;
+
+    {
+        Timer t;
+        if(std::strcmp(MethodName, "gauss-seidel") == 0)
+        {
+            iterations = gauss_seidel_parallel(Matrix, b, x0, MatrixDim, 100, 1.5e-10, offset, chunkSize);
+        }
+        else if(std::strcmp(MethodName, "jacobi") == 0)
+        {
+            iterations = jacobi_seq(Matrix, b, x0, MatrixDim, 100, 1.5e-10);
+        }
+        else if(std::strcmp(MethodName, "chebyshev") == 0)
+        {
+            iterations = chebyshev_parallel(Matrix, b, x0, MatrixDim, 100, 1.5e-10, maxEig, minEig, offset, chunkSize);
+        }
+        else
+        {
+            printf("%s\n",MethodName);
+        }
+
+    }
+
+    if(worldRank == ROOT_PROCESS)
+        std::cout << "Root Process reports that " << iterations << " iterations have passed." << '\n';
+
+    MPI_Finalize();
+
+
+//    double* x0 = (double*) calloc(matrix.columnSize, sizeof(double));
+//    double* b  = ones(matrix.columnSize);
+
+
+
+
+    /*
 
     int iterations = 0;
 
@@ -164,6 +223,14 @@ int main(int argc, char **argv) {
 
     free(x0);
     free(b);
+
+    */
+
+
+
+
+
+
 
 
     /*
