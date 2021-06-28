@@ -70,6 +70,19 @@ inline void parallel_cblas_daxpy(int Size, double Alpha, double* X, int incX, do
 
 }
 
+inline void forward_sweep_parallel(double *A, int mSize, double *b, double *x, int offset, int size, int chunksize)
+{
+    // set x values to 0
+    std::memset(x, 0, sizeof(double)*mSize);
+    /*
+    for(int i=0; i<mSize; i++)
+    {
+        for(int j=i-1; j>=0; j--)
+            x[i] += A[i * mSize + j]*x[j];
+
+        x[i] = (b[i] - x[i])/A[i* mSize + i];
+    } */
+}
 
 
 /**
@@ -240,7 +253,7 @@ inline int chebyshev_parallel(double *A, double *b, double *x0, size_t size, int
         std::memcpy(r, b, sizeof(double)*size);
 
         // r = b - A*x
-        parallel_cblas_dgemv(CBLAS_ORDER::CblasRowMajor, CBLAS_TRANSPOSE::CblasNoTrans, size, size, -1.0, A, size, x, 1, 1, r, 1, offset, chunksize, size);
+        cblas_dgemv(CBLAS_ORDER::CblasRowMajor, CBLAS_TRANSPOSE::CblasNoTrans, size, size, -1.0, A, size, x, 1, 1, r, 1);
         double norm_r = cblas_dnrm2(size, r, 1);
         if(norm_r < tolerance)
         {
